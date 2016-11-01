@@ -1,11 +1,20 @@
 function ops = convertOpenEphysToRawBInary(ops)
 
-fname       = fullfile(ops.root, sprintf('%s.dat', ops.fbinary)); 
+%fname       = fullfile(ops.root, sprintf('%s.dat', ops.fbinary)); 
+fname       = ops.fbinary; 
 fidout      = fopen(fname, 'w');
+UTmkdir(fname);
+if(fidout==-1)
+    error(['Could not open file: ',fname])
+end
 %
-clear fs
+fs=cell(ops.Nchan,1);
 for j = 1:ops.Nchan
-   fs{j} = dir(fullfile(ops.root, sprintf('*CH%d_*.continuous', j) ));
+   for k=1:length(ops.root)
+       d=dir(fullfile(ops.root{k}, sprintf('*CH%d.continuous', j) ));
+       [d.dir]=deal(ops.root{k});
+       fs{j} = [fs{j} d];
+   end
 end
 nblocks = cellfun(@(x) numel(x), fs);
 if numel(unique(nblocks))>1
@@ -16,11 +25,11 @@ nBlocks     = unique(nblocks);
 nSamples    = 1024;  % fixed to 1024 for now!
 
 fid = cell(ops.Nchan, 1);
-
+fprintf('Concatenating Open-Ephys data to a single binary file.')
 tic
 for k = 1:nBlocks
     for j = 1:ops.Nchan
-        fid{j}             = fopen(fullfile(ops.root, fs{j}(k).name));
+        fid{j}             = fopen(fullfile(fs{j}(k).dir, fs{j}(k).name));
         % discard header information
         fseek(fid{j}, 1024, 0);
     end
@@ -34,7 +43,8 @@ for k = 1:nBlocks
             
             rawData         = fread(fid{j}, 1000 * (nSamples + 6), '1030*int16', 10, 'b');
 
-            nbatches        = ceil(numel(rawData)/(nSamples+6));
+            %nbatches        = ceil(numel(rawData)/(nSamples+6));
+            nbatches        = floor(numel(rawData)/(nSamples+6));
             for s = 1:nbatches
                 rawSamps = rawData((s-1) * (nSamples + 6) +6+ [1:nSamples]);
                 collectSamps((s-1)*nSamples + [1:nSamples]) = rawSamps;

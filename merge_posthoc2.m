@@ -2,8 +2,10 @@ function rez = merge_posthoc2(rez)
 %fracse = 0.1;
 mu = rez.mu;
 fracse = rez.ops.fracse;
+rez.ops.min_spike_perc_keep=.1;
 
 ops = rez.ops;
+
 LAM = ops.lam(3) * (20./mu).^2;
 Nfilt = rez.ops.Nfilt;
 
@@ -37,7 +39,7 @@ picked = zeros(Nfilt, 1);
 while 1    
     [maxseed, iseed] = max(rez.nbins(1:Nfilt) .* (1-picked), [], 1);
 %     [maxseed, iseed] = max(mu(1:Nfilt) .* (1-picked), [], 1);
-    if maxseed<500
+    if maxseed/sum(rez.nbins)*100<rez.ops.min_spike_perc_keep
         break;
     end
     picked(iseed) = 1;
@@ -57,7 +59,7 @@ while 1
         [mmax, ipair] = max(rez.nbins(pair_list));
         
         
-        if mmax<100
+        if mmax<100%dont consider merging in any more pairs once the candidate with the fewest events is below this value
             break;
         end
         
