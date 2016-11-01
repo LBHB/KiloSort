@@ -8,7 +8,7 @@ mu = zeros(Nfilt, 1, 'single');
 % dmax = zeros(Nfilt, 1);
 
 dWU(isnan(dWU)) = 0;
-if ops.parfor
+if ops.use_parfor
     parfor k = 1:Nfilt
         [W(:,:,k), U(:,:,k), mu(k)] = get_svds(dWU(:,:,k), Nrank);
     end

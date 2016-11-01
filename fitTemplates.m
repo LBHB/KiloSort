@@ -5,8 +5,9 @@ rez.ops.nt0min  = ceil(20 * nt0/61);
 
 ops = rez.ops;
 
-rng('default');
-rng(1);
+%rng('default');
+%rng(1);
+rand('seed',1);randn('seed',1);
 
 Nbatch      = rez.temp.Nbatch;
 Nbatch_buff = rez.temp.Nbatch_buff;
@@ -34,7 +35,8 @@ switch ops.initialize
         %             dWU = alignWU(dWU);
     otherwise
         initialize_waves0;
-        ipck = randperm(size(Winit,2), Nfilt);
+        ro=randperm(size(Winit,2));
+        ipck = ro(1:Nfilt);
         W = [];
         U = [];
         for i = 1:Nrank
