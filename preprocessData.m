@@ -1,4 +1,4 @@
-function [rez, DATA, uproj] = preprocessData(ops)
+function [rez, DATA, uproj,ops] = preprocessData(ops)
 tic;
 uproj = [];
 ops.nt0 	= getOr(ops, {'nt0'}, 61);

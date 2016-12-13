@@ -1,24 +1,28 @@
 function ops = convertOpenEphysToRawBInary(ops)
 
-%fname       = fullfile(ops.root, sprintf('%s.dat', ops.fbinary)); 
-fname       = ops.fbinary; 
-fidout      = fopen(fname, 'w');
+%fname       = fullfile(ops.root, sprintf('%s.dat', ops.fbinary));
+fname       = ops.fbinary;
+do_write=true;
 UTmkdir(fname);
+if(do_write)
+    fidout      = fopen(fname, 'w');
 if(fidout==-1)
     error(['Could not open file: ',fname])
 end
+end
 %
+
 fs=cell(ops.Nchan,1);
 for j = 1:ops.Nchan
-   for k=1:length(ops.root)
-       d=dir(fullfile(ops.root{k}, sprintf('*CH%d.continuous', j) ));
-       [d.dir]=deal(ops.root{k});
-       fs{j} = [fs{j} d];
-   end
+    for k=1:length(ops.root)
+        d=dir(fullfile(ops.root{k}, sprintf('*CH%d.continuous', j) ));
+        [d.dir]=deal(ops.root{k});
+        fs{j} = [fs{j} d];
+    end
 end
 nblocks = cellfun(@(x) numel(x), fs);
 if numel(unique(nblocks))>1
-   error('different number of blocks for different channels!') 
+    error('different number of blocks for different channels!')
 end
 %
 nBlocks     = unique(nblocks);
@@ -58,10 +62,11 @@ for k = 1:nBlocks
         if flag==0
             samples = samples(1:s*nSamples, :);
         end
-       
-        samples         = samples';
-        fwrite(fidout, samples, 'int16');
         
+        samples         = samples';
+        if(do_write)
+            fwrite(fidout, samples, 'int16');
+        end
         nsamps = nsamps + size(samples,2);
         
         if flag==0
@@ -71,11 +76,11 @@ for k = 1:nBlocks
     ops.nSamplesBlocks(k) = nsamps;
     
     for j = 1:ops.Nchan
-       fclose(fid{j}); 
+        fclose(fid{j});
     end
     
 end
-    
-fclose(fidout);
-
+if(do_write)
+    fclose(fidout);
+end
 toc
