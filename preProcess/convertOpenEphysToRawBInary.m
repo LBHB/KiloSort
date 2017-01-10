@@ -1,8 +1,10 @@
-function ops = convertOpenEphysToRawBInary(ops)
+function ops = convertOpenEphysToRawBInary(ops,do_write)
 
+if(nargin<2)
+    do_write=true;
+end
 %fname       = fullfile(ops.root, sprintf('%s.dat', ops.fbinary));
 fname       = ops.fbinary;
-do_write=true;
 UTmkdir(fname);
 if(do_write)
     fidout      = fopen(fname, 'w');

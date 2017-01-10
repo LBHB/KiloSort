@@ -1,13 +1,17 @@
-function [rez, DATA, uproj,ops] = preprocessData(ops)
+function [rez, DATA, uproj,ops] = preprocessData(ops,do_write)
+
+if(nargin<2)
+    do_write=true;
+end
+
 tic;
 uproj = [];
 ops.nt0 	= getOr(ops, {'nt0'}, 61);
 
 
 if strcmp(ops.datatype , 'openEphys')
-   ops = convertOpenEphysToRawBInary(ops);  % convert data, only for OpenEphys
+   ops = convertOpenEphysToRawBInary(ops,do_write);  % convert data, only for OpenEphys
 end
-
 if ~isempty(ops.chanMap)
     if ischar(ops.chanMap)
         load(ops.chanMap);
