@@ -44,3 +44,16 @@ save('C:\DATA\Spikes\Piroska\chanMap.mat', ...
 % number" of channel groups at which to set the threshold. So if a template
 % occupies more than this many channel groups, it will not be restricted to
 % a single channel group. 
+
+
+Nchannels = 4;
+connected = true(Nchannels, 1);
+chanMap   = 1:Nchannels;
+chanMap0ind = chanMap - 1;
+xcoords   = [0 -20 20 0]';
+ycoords   = [0 20 20 40]';
+kcoords   = ones(Nchannels,1); % grouping of channels (i.e. tetrode groups)
+
+fs = 30000; % sampling frequency
+save('/auto/data/code/KiloSort/chanMap_Thomas_Tetrode.mat', ...
+    'chanMap','connected', 'xcoords', 'ycoords', 'kcoords', 'chanMap0ind', 'fs')

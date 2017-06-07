@@ -5,10 +5,13 @@ rez.ops.nt0min  = ceil(20 * nt0/61);
 
 ops = rez.ops;
 
-%rng('default');
-%rng(1);
-rand('seed',1);randn('seed',1);
 
+if verLessThan('matlab','9')
+    rand('seed',1);randn('seed',1);
+else
+    rng('default');
+    rng(1);
+end
 Nbatch      = rez.temp.Nbatch;
 Nbatch_buff = rez.temp.Nbatch_buff;
 
@@ -27,7 +30,6 @@ batchstart = 0:NT:NT*(Nbatch-Nbatch_buff);
 
 delta = NaN * ones(Nbatch, 1);
 iperm = randperm(Nbatch);
-
 switch ops.initialize
     case 'fromData'
         WUinit = optimizePeaks(ops,uproj);%does a scaled kmeans 
@@ -35,8 +37,12 @@ switch ops.initialize
         %             dWU = alignWU(dWU);
     otherwise
         initialize_waves0;
-        ro=randperm(size(Winit,2));
-        ipck = ro(1:Nfilt);
+        if verLessThan('matlab','9')
+            ro=randperm(size(Winit,2));
+            ipck = ro(1:Nfilt);
+        else
+            ipck = randperm(size(Winit,2), Nfilt);
+        end
         W = [];
         U = [];
         for i = 1:Nrank
@@ -142,11 +148,12 @@ while (i<=Nbatch * ops.nfullpasses+1)
 %             set(0,'DefaultFigureWindowStyle','docked')
 %             figure;
             subplot(2,2,1)
+            Np=min(Nfilt-1,9);
             for j = 1:10:Nfilt
-                if j+9>Nfilt;
-                    j = Nfilt -9;
+                if j+Np>Nfilt;
+                    j = Nfilt -Np;
                 end
-                plot(log(1+NSP(j + [0:1:9])), mu(j+ [0:1:9]), 'o');
+                plot(log(1+NSP(j + [0:1:Np])), mu(j+ [0:1:Np]), 'o');
                 xlabel('log of number of spikes')
                 ylabel('amplitude of template')
                 hold all
