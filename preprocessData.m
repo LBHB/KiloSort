@@ -9,8 +9,11 @@ uproj = [];
 ops.nt0 	= getOr(ops, {'nt0'}, 61);
 
 
-if strcmp(ops.datatype , 'openEphys')
+switch ops.datatype 
+    case 'openEphys'
    ops = convertOpenEphysToRawBInary(ops,do_write);  % convert data, only for OpenEphys
+    case 'MANTA'
+    ops = convertMANTAToRawBinary(ops,do_write);  % convert data, only for MANTA
 end
 if ~isempty(ops.chanMap)
     if ischar(ops.chanMap)
@@ -282,7 +285,6 @@ for ibatch = 1:Nbatch
     end
     
 end
-
 if strcmp(ops.initialize, 'fromData')
    uproj(i0+1:end, :) = []; 
 end

@@ -67,6 +67,17 @@ for k = 1:nBlocks
         
         samples         = samples';
         if(do_write)
+            if(isfield(ops,'common_rejection_mode'))
+                switch ops.common_rejection_mode
+                    case 'none'
+                    case 'mean'
+                        samples=samples-repmat(mean(samples),size(samples,1),1);
+                    case 'median'
+                        samples=samples-repmat(median(samples),size(samples,1),1);
+                    otherwise
+                        error(['Unknown comon rejection mode ',ops.common_rejection_mode])
+                end
+            end
             fwrite(fidout, samples, 'int16');
         end
         nsamps = nsamps + size(samples,2);
