@@ -31,9 +31,10 @@ nBlocks     = unique(nblocks);
 nSamples    = 1024;  % fixed to 1024 for now!
 
 fid = cell(ops.Nchan, 1);
-fprintf('Concatenating Open-Ephys data to a single binary file.')
+fprintf('Concatenating Open-Ephys data to a single binary file.\n')
 tic
 for k = 1:nBlocks
+    fprintf(['Block ',num2str(k),' of ',num2str(nBlocks),'\n'])
     for j = 1:ops.Nchan
         fid{j}             = fopen(fullfile(fs{j}(k).dir, fs{j}(k).name));
         % discard header information
@@ -96,4 +97,5 @@ end
 if(do_write)
     fclose(fidout);
 end
+fprintf('Done concatenating\n')
 toc
