@@ -57,3 +57,38 @@ kcoords   = ones(Nchannels,1); % grouping of channels (i.e. tetrode groups)
 fs = 30000; % sampling frequency
 save('/auto/data/code/KiloSort/chanMap_Thomas_Tetrode.mat', ...
     'chanMap','connected', 'xcoords', 'ycoords', 'kcoords', 'chanMap0ind', 'fs')
+%%
+[s,UCLA_to_OEP]=probe_128D();
+x=s.x(UCLA_to_OEP);
+round_factor=100;
+x=round(x/round_factor)*round_factor;
+[unx,~,uni]=unique(x);
+Nchannels = 128;
+connected = true(Nchannels, 1);
+chanMap   = 1:Nchannels;
+chanMap0ind = chanMap - 1;
+xcoords   = s.x(UCLA_to_OEP);%[0 -20 20 0]';
+ycoords   = s.z(UCLA_to_OEP);%[0 20 20 40]';
+kcoords   = uni; % grouping of channels (i.e. tetrode groups)
+chanMap0ind = chanMap - 1;
+fs = 30000; % sampling frequency
+save('/auto/data/code/KiloSort/chanMap_128D.mat', ...
+    'chanMap','connected', 'xcoords', 'ycoords', 'kcoords', 'chanMap0ind', 'fs')
+
+%%
+[s,UCLA_to_OEP]=probe_64D();
+x=s.x(UCLA_to_OEP);
+round_factor=100;
+x=round(x/round_factor)*round_factor;
+[unx,~,uni]=unique(x);
+Nchannels = 64;
+connected = true(Nchannels, 1);
+chanMap   = UCLA_to_OEP+64;
+chanMap0ind = chanMap - 1;
+xcoords   = s.x(UCLA_to_OEP);%[0 -20 20 0]';
+ycoords   = s.z(UCLA_to_OEP);%[0 20 20 40]';
+kcoords   = uni; % grouping of channels (i.e. tetrode groups)
+chanMap0ind = chanMap - 1;
+fs = 30000; % sampling frequency
+save('/auto/data/code/KiloSort/chanMap_64D_slot2.mat', ...
+    'chanMap','connected', 'xcoords', 'ycoords', 'kcoords', 'chanMap0ind', 'fs')

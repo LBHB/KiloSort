@@ -10,14 +10,18 @@ ops.nt0 	= getOr(ops, {'nt0'}, 61);
 
 
 switch ops.datatype 
-    case 'openEphys'
+    case 'Open-Ephys'
    ops = convertOpenEphysToRawBInary(ops,do_write);  % convert data, only for OpenEphys
     case 'MANTA'
     ops = convertMANTAToRawBinary(ops,do_write);  % convert data, only for MANTA
 end
+
 if ~isempty(ops.chanMap)
     if ischar(ops.chanMap)
         load(ops.chanMap);
+        if isfield(ops,'chanMap2')
+            chanMap=ops.chanMap2;
+        end
         try
             chanMapConn = chanMap(connected>1e-6);
             xc = xcoords(connected>1e-6);
@@ -33,7 +37,11 @@ if ~isempty(ops.chanMap)
             ops.fs       = getOr(ops, 'fs', fs);
         end
     else
-        chanMap = ops.chanMap;
+        if isfield(ops,'chanMap2')
+            chanMap=ops.chanMap2;
+        else
+            chanMap = ops.chanMap;
+        end
         chanMapConn = ops.chanMap;
         xc = zeros(numel(chanMapConn), 1);
         yc = [1:1:numel(chanMapConn)]';

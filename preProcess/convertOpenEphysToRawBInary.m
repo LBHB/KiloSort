@@ -14,10 +14,13 @@ end
 end
 %
 
+ch=load(ops.chanMap);
+chans=sort(ch.chanMap);
 fs=cell(ops.Nchan,1);
 for j = 1:ops.Nchan
+    ops.chanMap2(ch.chanMap==chans(j))=j;
     for k=1:length(ops.root)
-        d=dir(fullfile(ops.root{k}, sprintf('*CH%d.continuous', j) ));
+        d=dir(fullfile(ops.root{k}, sprintf('*CH%d.continuous', chans(j)) ));
         [d.dir]=deal(ops.root{k});
         fs{j} = [fs{j} d];
     end
