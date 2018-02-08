@@ -103,6 +103,7 @@ end
 
 nswitch = [0];
 msg = [];
+align_count=0;
 fprintf('Time %3.0fs. Optimizing templates ...\n', toc)
 while (i<=Nbatch * ops.nfullpasses+1)
     % set the annealing parameters
@@ -126,8 +127,11 @@ while (i<=Nbatch * ops.nfullpasses+1)
                 replace_clusters(dWU, dbins,  Nbatch, ops.mergeT, ops.splitT, WUinit, nspikes);
         end
         
-        dWU = alignWU(dWU, ops);
-        
+        [dWU,similars,iMinChan,xc] = alignWU(dWU, ops);
+        align_count=align_count+1;
+        rez.similars{align_count}=similars;
+        rez.iMinChan{align_count}=iMinChan;
+        rez.align_xc{align_count}=xc;
         % restrict spikes to their peak group
         %         dWU = decompose_dWU(dWU, kcoords);
         
@@ -227,7 +231,7 @@ while (i<=Nbatch * ops.nfullpasses+1)
     % update status
     if ops.verbose  && rem(i,20)==1
         nsort = sort(round(sum(nspikes,2)), 'descend');
-        fprintf(repmat('\b', 1, numel(msg)));
+        %fprintf(repmat('\b', 1, numel(msg)));
         msg = sprintf('Time %2.2f, batch %d/%d, mu %2.2f, neg-err %2.6f, NTOT %d, n100 %d, n200 %d, n300 %d, n400 %d\n', ...
             toc, i,Nbatch* ops.nfullpasses,nanmean(mu(:)), nanmean(delta), round(sum(nsort)), ...
             nsort(min(size(W,2), 100)), nsort(min(size(W,2), 200)), ...
