@@ -1,20 +1,13 @@
-function [rez, DATA, uproj,ops] = preprocessData(ops,do_write)
+function [rez, DATA, uproj,ops] = preprocessData(ops,do_write,drift_track_windows_all)
 
 if(nargin<2)
     do_write=true;
 end
 
 tic;
-uproj = [];
+% uproj = [];
 ops.nt0 	= getOr(ops, {'nt0'}, 61);
 
-
-switch ops.datatype 
-    case 'Open-Ephys'
-   ops = convertOpenEphysToRawBInary(ops,do_write);  % convert data, only for OpenEphys
-    case 'MANTA'
-    ops = convertMANTAToRawBinary(ops,do_write);  % convert data, only for MANTA
-end
 
 if ~isempty(ops.chanMap)
     if ischar(ops.chanMap)
@@ -58,6 +51,18 @@ else
     xc = zeros(numel(chanMapConn), 1);
     yc = [1:1:numel(chanMapConn)]';
 end
+rez.ops         = ops;
+ops.xc=xc;
+ops.yc=yc;
+ops.chanMapConn=chanMapConn;
+switch ops.datatype
+    case 'Open-Ephys'
+   ops = convertOpenEphysToRawBInary(ops,do_write);  % convert data, only for OpenEphys
+    case 'MANTA'
+    ops = convertMANTAToRawBinary(ops,do_write);  % convert data, only for MANTA
+end
+
+
 if exist('kcoords', 'var')
     kcoords = kcoords(connected);
 else
@@ -66,7 +71,7 @@ end
 NchanTOT = ops.NchanTOT;
 NT       = ops.NT ;
 
-rez.ops         = ops;
+
 rez.xc = xc;
 rez.yc = yc;
 rez.xcoords = xcoords;
@@ -204,6 +209,54 @@ fprintf('Time %3.0fs. Loading raw data and applying filters... \n', toc);
 
 fid         = fopen(ops.fbinary, 'r');
 fidW    = fopen(ops.fproc, 'w');
+if ops.save_filtered_binary
+    fidW2    = fopen(strrep(ops.fbinary,'.dat','_filtered.dat'), 'w');
+end
+if ops.find_drift_correction
+    spike_window=round([-.5 1]/1000*ops.fs);
+    spike_window=spike_window(1):spike_window(2);
+    [all_spikes,spike_time,spike_channel,batch_origin]=UTkilosort_get_spikes(ops,DATA,Nbatch,isproc,spike_window,Wrot);
+    sl=strfind(ops.results_path,'/');
+    name=ops.results_path(sl(end-1)+1:sl(end)-1);
+    fn=sprintf('/auto/users/luke/Projects/MultiChannel/Drift/images/%s/For_drift.mat',name);
+    UTmkdir(fn)
+    save(fn,'all_spikes','spike_time','spike_channel','batch_origin','ops','Nbatch','Wrot','drift_track_windows_all','-v7.3')
+    
+    drift_track_windows=[];
+    drift_track_windows_start_re_job_onset=[];
+    for j=1:length(drift_track_windows_all)
+        drift_track_windows=[drift_track_windows ; drift_track_windows_all{j} + sum(ops.nSamplesBlocks(1:j-1))];
+        drift_track_windows_start_re_job_onset=[drift_track_windows_start_re_job_onset ; drift_track_windows_all{j} + ops.StartTime_re_Run1(j)*ops.fs];
+    end
+    
+    win_sizes=[.3*20,.3*10,0.3*40,60];
+    win_steps=[.3*2,.3*2,0.3*2,1];
+    shift_plot_range=[];
+    shift_ops.amp_prctile_cutoff=100;
+    shift_ops.max_ref_window_range_microns=.5;
+    shift_ops.N_ref_windows=30;
+    shift_ops.N_ref_history_windows=5;
+    shift_ops.N_ref_gap=inf;
+    shift_ops.usfac=1000;
+    shift_ops.shift_search_bounds_um=[0 0;-150 150];
+    shift_ops.suffix_str=' bounded';
+    shift_ops.window_snapshots=true;
+    %shift_ops.suffix_str=' allspikes';
+    for k=1:length(win_sizes)
+        [shifts,shifts_interp,mean_time,mean_spikes,mean_spikes_interp,shift_plot_range_]=UTkilosort_calculate_drift_combined(ops,all_spikes,spike_time,spike_channel,drift_track_windows,ops.fs*win_sizes(k),ops.fs*win_steps(k),shift_plot_range,shift_ops);
+        if k==1
+            shift_plot_range=shift_plot_range_;
+        end
+        sl=strfind(ops.results_path,'/');
+        name=ops.results_path(sl(end-1)+1:sl(end)-1);
+        fn=sprintf('/auto/users/luke/Projects/MultiChannel/Drift/images/%s/size %d step %g.mat',name,win_sizes(k),win_steps(k));
+        UTmkdir(fn)
+        save(fn,'shifts','shifts_interp','mean_time','mean_spikes','mean_spikes_interp')
+    end
+    if ops.return_after_finding_drift_correction
+        return
+    end
+end
 
 if strcmp(ops.initialize, 'fromData')
     i0  = 0;
@@ -211,10 +264,29 @@ if strcmp(ops.initialize, 'fromData')
     wPCA = ops.wPCA(ixt, 1:3);
     
     rez.ops.wPCA = wPCA; % write wPCA back into the rez structure
-    uproj = zeros(1e6,  size(wPCA,2) * Nchan, 'single');
+    uproj = zeros(1e6,  size(wPCA,2) * Nchan, 'single');  
 end
 %
+do_dc=false;
+if isfield(ops,'driftCorrectionFile') && strcmp(ops.driftCorrectionMode,'AfterFiltering')
+    do_dc=true;
+    df=load(ops.driftCorrectionFile,'shifts_interp','mean_time');
+    if length(df.shifts_interp)~=length(df.mean_time)
+        error('fix drift file')
+    end
+    drift=fastsmooth(df.shifts_interp(4,[1:end,end]),3,2,1);
+    drift(1)=0;
+    drift_time=[0 df.mean_time(2:end)];     
+    drift_time(end+1)=Nbatch*NT;%add end time
+    
+    xcoords=round(xcoords/10)*10;
+    uxc=unique(xcoords);
+end
+fprintf('\n Batch: 1')
 for ibatch = 1:Nbatch
+    if mod(ibatch,10)==0
+        fprintf(' %d',ibatch)
+    end
     if isproc(ibatch) %ibatch<=Nbatch_buff
         if ops.GPU
             datr = single(gpuArray(DATA(:,:,ibatch)));
@@ -257,16 +329,84 @@ for ibatch = 1:Nbatch
     end
     
     datr    = datr * Wrot;
-    
     if ops.GPU
         dataRAW = gpuArray(datr);
     else
         dataRAW = datr;
     end
-    %         dataRAW = datr;
+    if do_dc
+        
+        if ibatch==1
+            profile clear;profile on;
+        end
+        t1=now;
+        dataRAW=dataRAW';
+        %dataRAWshifted=nan(size(dataRAW),class(dataRAW));
+        drift_interp=interp1(drift_time,drift,(ibatch-1)*NT+(1:NT));
+         discretize_factor=10;
+        drift_interp=round(drift_interp*discretize_factor)/discretize_factor;        
+         if any(isnan(drift_interp))
+             error('NaNs!')
+         end
+        if ops.GPU
+            y = gpuArray(rez.ycoords);
+            un_drifts=gpuArray(unique(drift_interp));
+        else
+            y = rez.ycoords;
+            un_drifts=unique(drift_interp);
+        end
+        for xi=1:length(uxc)
+            ch_inds=xcoords==uxc(xi);
+            if 1
+                for ti=1:length(un_drifts)
+                    t_inds=drift_interp==un_drifts(ti);
+                    dataRAW(ch_inds,t_inds)=interp1(y(ch_inds),dataRAW(ch_inds,t_inds),y(ch_inds)-un_drifts(ti),'linear',0);
+                end
+            else
+                for ti=1:NT
+                    %df.mean_time;
+                    %dataRAWshifted(ti,ch_inds)=interp1(rez.ycoords(ch_inds),dataRAW(ti,ch_inds),rez.ycoords(ch_inds)-drift_interp(ti));
+                    dataRAW(ch_inds,ti)=interp1(rez.ycoords(ch_inds),dataRAW(ch_inds,ti),rez.ycoords(ch_inds)+drift_interp(ti),'linear',0);
+                end
+            end
+        end
+        %save(fn,'shifts','shifts_interp','mean_time','mean_spikes','mean_spikes_interp')
+        dataRAW=dataRAW';
+        t2=now;
+        v=datevec(t2-t1);
+        fprintf('Correcting drift for batch %d took %3.5gs. \n',ibatch,v(4)*3600+v(5)*60+v(6));
+        
+        if ibatch==1
+            profile viewer
+            keyboard
+        end
+    end
+    if ops.save_filtered_binary
+        if ibatch==1
+            fwrite(fidW2, gather_try(int16(datr(1:(NT-ops.ntbuff),:)')), 'int16');
+        else
+            %fwrite(fidW2, datcpu(ops.ntbuff:NT,:)', 'int16');
+            fwrite(fidW2, gather_try(int16(datr((ops.ntbuff+1):(NT),:)')), 'int16');
+        end
+    end  
+    if do_dc
+        if ibatch<=Nbatch_buff
+            DATA(:,:,ibatch) = gather_try(dataRAW);
+        else
+            datcpu  = gather_try(int16(dataRAW));
+            fwrite(fidW, datcpu, 'int16');
+        end
+    else
+        if ibatch<=Nbatch_buff
+            DATA(:,:,ibatch) = gather_try(datr);
+        else
+            datcpu  = gather_try(int16(datr));
+            fwrite(fidW, datcpu, 'int16');
+        end
+    end
+
     dataRAW = single(dataRAW);
     dataRAW = dataRAW / ops.scaleproc;
-    
     if strcmp(ops.initialize, 'fromData') %&& rem(ibatch, 10)==1
         % find isolated spikes
         [row, col, mu] = isolated_peaks(dataRAW, ops.loc_range, ops.long_range, ops.spkTh);
@@ -285,13 +425,7 @@ for ibatch = 1:Nbatch
         i0 = i0 + numel(row);
     end
     
-    if ibatch<=Nbatch_buff
-        DATA(:,:,ibatch) = gather_try(datr);
-    else
-        datcpu  = gather_try(int16(datr));
-        fwrite(fidW, datcpu, 'int16');
-    end
-    
+
 end
 if strcmp(ops.initialize, 'fromData')
    uproj(i0+1:end, :) = []; 
@@ -300,6 +434,9 @@ Wrot        = gather_try(Wrot);
 rez.Wrot    = Wrot;
 
 fclose(fidW);
+if ops.save_filtered_binary
+    fclose(fidW2);
+end
 fclose(fid);
 if ops.verbose
     fprintf('Time %3.2f. Whitened data written to disk... \n', toc);
@@ -310,3 +447,170 @@ end
 rez.temp.Nbatch = Nbatch;
 rez.temp.Nbatch_buff = Nbatch_buff;
 
+if 0
+    %bin by spike index
+    Nsp=10000;
+    sti=1:Nsp:(size(uproj,1)-Nsp);
+    mean_clips=zeros(size(wPCA,1), Nchan,length(sti),'single');
+    for i=1:length(sti)
+        %to get waveforms
+        Us = reshape(uproj(sti(i)+[0:Nsp-1],:),Nsp, Nchan,size(wPCA,2));
+        clips_back=reshape(wPCA*reshape(permute(Us,[3 1 2]),3,[]),size(wPCA,1), size(Us,1), Nchan);
+        mean_clips(:,:,i)=mean(clips_back,2);
+    end
+    
+    figure;
+    for i=1:length(sti)
+        imagesc(mean_clips(:,:,i)')
+        title(num2str(i))
+        pause
+    end
+    
+    %bin by batch
+    mean_clips2=zeros(size(wPCA,1), Nchan,Nbatch,'single');
+    for i=1:Nbatch
+        %to get waveforms
+        Us = reshape(uproj(batch_origin==i,:),sum(batch_origin==i), Nchan,size(wPCA,2));
+        clips_back=reshape(wPCA*reshape(permute(Us,[3 1 2]),3,[]),size(wPCA,1), size(Us,1), Nchan);
+        mean_clips2(:,:,i)=mean(clips_back,2);
+    end
+    
+    figure;
+    for i=1:Nbatch
+        imagesc(mean_clips3(:,:,i)')
+        title(num2str(i))
+        pause
+    end
+    
+    %bin by trial (silent periods only)
+    windows_per_drift_window=3;
+    N=floor(size(drift_track_windows,1)/windows_per_drift_window);
+    mean_clips3=zeros(size(wPCA,1), Nchan,N,'single');
+    for i=1:N
+        %to get waveforms
+        inds=false(size(spike_time));
+        for j=1:windows_per_drift_window
+            inds=inds | spike_time>=drift_track_windows(i+j-1,1) & spike_time<drift_track_windows(i+j-1,2);
+        end
+        Us = reshape(uproj(inds,:),sum(inds), Nchan,size(wPCA,2));
+        clips_back=reshape(wPCA*reshape(permute(Us,[3 1 2]),3,[]),size(wPCA,1), size(Us,1), Nchan);
+        mean_clips3(:,:,i)=mean(clips_back,2);
+        k=32;
+        [clusts,c] = kmeans(uproj(inds,:),k,'EmptyAction','singleton');
+        Us = reshape(c,k, Nchan,size(wPCA,2));
+        clips_back=reshape(wPCA*reshape(permute(Us,[3 1 2]),3,[]),size(wPCA,1), size(Us,1), Nchan);
+        mean_clips4(:,:,:,i)=permute(clips_back,[1 3 2]);
+        subz=UTget_subs(k);
+        figure;ax=subplot1(subz{:});
+        clear dat
+        xl=[.5 diff(drift_track_windows(1,:))+extra+.5];yl=[.5 size(mean_clips3,2)+.5];
+        for i=1:length(ind)
+            bi=floor(drift_track_windows(i,:)/NT)+1;
+            ti=mod(drift_track_windows(i,:),NT);
+            if bi(1)==bi(2)
+                dat(:,:,i)=DATA(ti(1):ti(2)+extra,:,bi(1));
+            else
+                dat(:,:,i)=[DATA(ti(1):end,:,bi(1));DATA(1:ti(2)+extra,:,bi(2))];
+            end
+            imagesc(dat(:,:,i)','Parent',ax(i));
+            set(ax(i),'YDir','normal','XLim',xl,'YLim',yl)
+            text(xl(1),yl(2),num2str(ind(i)),'VerticalAlignment','top','Parent',ax(i),'Color','w')
+        end
+        cl=[min(dat(:)) max(dat(:))];
+        set(ax,'CLim',cl)
+    end
+    
+    
+    ind=1:12;
+    subz=UTget_subs(length(ind));
+    figure;ax=subplot1(subz{:});
+    xl=[.5 size(mean_clips3,1)+.5];yl=[.5 size(mean_clips3,2)+.5];
+    for i=1:length(ind)
+        imagesc(mean_clips3(:,:,ind(i))','Parent',ax(i));
+        set(ax(i),'YDir','normal','XLim',xl,'YLim',yl)
+        text(xl(1),yl(2),num2str(ind(i)),'VerticalAlignment','top','Parent',ax(i),'Color','w')
+    end
+    cl=[min(min(min(mean_clips3(:,:,ind)))) max(max(max(mean_clips3(:,:,ind))))];
+    set(ax,'CLim',cl)
+    
+    ind=1:12;
+    subz=UTget_subs(length(ind));
+    figure;ax=subplot1(subz{:});
+    clear dat
+    extra=30000*.1;
+    xl=[.5 diff(drift_track_windows(1,:))+extra+.5];yl=[.5 size(mean_clips3,2)+.5];
+    for i=1:length(ind)
+        bi=floor(drift_track_windows(i,:)/NT)+1;
+        ti=mod(drift_track_windows(i,:),NT);
+        if bi(1)==bi(2)
+            dat(:,:,i)=DATA(ti(1):ti(2)+extra,:,bi(1));
+        else
+            dat(:,:,i)=[DATA(ti(1):end,:,bi(1));DATA(1:ti(2)+extra,:,bi(2))];
+        end
+        imagesc(dat(:,:,i)','Parent',ax(i));
+        set(ax(i),'YDir','normal','XLim',xl,'YLim',yl)
+        text(xl(1),yl(2),num2str(ind(i)),'VerticalAlignment','top','Parent',ax(i),'Color','w')
+    end
+    cl=[min(dat(:)) max(dat(:))];
+    set(ax,'CLim',cl)
+    
+    ind=1:12;
+    subz=UTget_subs(length(ind));
+    figure;ax=subplot1(subz{:});
+    clear dat
+    extra=30000*.1;
+    xl=[.5 diff(drift_track_windows(1,:))+extra+.5];yl=[.5 size(mean_clips3,2)+.5];
+    ch=[29 30 31 32];
+    for i=1:length(ind)
+        bi=floor(drift_track_windows(i,:)/NT)+1;
+        ti=mod(drift_track_windows(i,:),NT);
+        if bi(1)==bi(2)
+            dat(:,:,i)=DATA(ti(1):ti(2)+extra,:,bi(1));
+        else
+            dat(:,:,i)=[DATA(ti(1):end,:,bi(1));DATA(1:ti(2)+extra,:,bi(2))];
+        end
+        plot(dat(:,ch,i),'Parent',ax(i));
+    end
+    set(ax,'XLim',[1 size(dat,1)])
+    set(ax,'YLim',[min(arrayfun(@(x)min(get(x,'YLim')),ax)) max(arrayfun(@(x)max(get(x,'YLim')),ax))])
+    
+    ind=1:12;
+    subz=UTget_subs(length(ind));
+    figure;ax=subplot1(subz{:});
+    clear dat
+    extra=30000*.1;
+    xl=[.5 diff(drift_track_windows(1,:))+extra+.5];yl=[.5 size(mean_clips3,2)+.5];
+    for i=1:length(ind)
+        inds=spike_time>=drift_track_windows(ind(i),1) & spike_time<drift_track_windows(ind(i),2);
+        Us = reshape(uproj(inds,:),sum(inds), Nchan,size(wPCA,2));
+        clips_back=reshape(wPCA*reshape(permute(Us,[3 1 2]),3,[]),size(wPCA,1), size(Us,1), Nchan);
+        [mv,ch]=min(min(clips_back,[],1),[],3);
+        hist(ax(i),ch,1:64);
+        c(i)=length(ch);
+    end
+    set(ax,'YLim',[0 max(arrayfun(@(x)max(get(x,'YLim')),ax))])
+    set(ax,'XLim',[0 65])
+    
+    
+    
+    figure;
+    for i=1:size(mean_clips3,3)
+        imagesc(mean_clips3(:,:,i)')
+        title(num2str(i))
+        pause
+    end
+    
+    Us = reshape(uproj,size(uproj,1), Nchan,size(wPCA,2));
+    figure;plot(squeeze(Us(:,32,:)))
+    
+    
+    Us = permute(uS,[2 1 3]);
+    clips_back=reshape(wPCA*reshape(permute(Us,[3 1 2]),3,[]),size(wPCA,1), size(Us,1), Nchan);
+    
+    [nT, nChan] = size(dataRAW);
+    dt = -21 + [1:size(wPCA,1)];
+    inds = repmat(row', numel(dt), 1) + repmat(dt', 1, numel(row));
+    
+    clips = reshape(dataRAW(inds, :), numel(dt), numel(row), nChan);
+end
+end

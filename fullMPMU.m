@@ -110,6 +110,17 @@ if ~isempty(ops.nNeighPC)
     maskPC = repmat(maskPC, 3, 1);
 end
 
+if ~isfield(ops,'fullMPMU_keep_spikes')
+    ops.fullMPMU_keep_spikes=false;
+end
+if ops.fullMPMU_keep_spikes
+    mt=round(nt0/2);
+    spike_window=round([-.8 .9]/1000*ops.fs);
+    spike_window=int32((spike_window(1):spike_window(2))+mt)';
+    rez.spikes = zeros(length(spike_window),5e5, Nchan, 'single');    
+    did_expand=0;
+end
+
 irun = 0;
 i1nt0 = int32([1:nt0])';
 %%
@@ -153,6 +164,30 @@ for ibatch = 1:Nbatch
     end
     
     if ~isempty(st)
+        if ops.fullMPMU_keep_spikes
+            if irun + numel(st) > size(rez.spikes,2)
+                if did_expand==0
+                    est_spikes_per_batch=(irun+numel(st))/ibatch;
+                    est_total_spikes=est_spikes_per_batch*Nbatch;
+                    new_spike_end=round(est_total_spikes*1.1);
+                    did_expand=1;
+                    fprintf('Pre-allocated matricies not big enough, estimated %d total spikes, expanding to %d.\n',round(est_total_spikes),new_spike_end)
+                else
+                    est_spikes_per_batch=(irun+numel(st))/ibatch;
+                    add_Nspikes=est_spikes_per_batch*(Nbatch-ibatch+1)*2;
+                    new_spike_end=round(add_Nspikes + size(rez.spikes,2));
+                    fprintf('Pre-allocated matricies still not big enough, estimated %d total spikes, expanding to %d.\n',round(est_spikes_per_batch*Nbatch),new_spike_end)
+                end
+                rez.spikes(:,new_spike_end,:) = 0;
+            end
+            inds2 = repmat(st',length(spike_window), 1) + repmat(spike_window, 1, numel(st));
+            try  datSp      = dataRAW(inds2(:), :);
+            catch
+                datSp       = dataRAW(inds2(:), :);
+            end
+            datSp           = reshape(datSp, [size(inds2) Nchan]);
+            rez.spikes(:,irun + (1:numel(st)),:)=gather(datSp);
+        end
         if ~isempty(ops.nNeighPC)
             % PCA coefficients
             inds            = repmat(st', nt0, 1) + repmat(i1nt0, 1, numel(st));
@@ -166,6 +201,17 @@ for ibatch = 1:Nbatch
             coefs           = coefs .* maskPC(:, id+1);
             iCoefs          = reshape(find(maskPC(:, id+1)>0), 3*nNeighPC, []);
             rez.cProjPC(irun + (1:numel(st)), :) = gather(coefs(iCoefs)');
+            
+            if 0
+            %back to spikes
+                NS=size(proj,1);
+                proj=gather(coefs(iCoefs)');
+                coefs2=zeros(Nchan*size(Wi,2),NS);
+                coefs2(iCoefs)=proj';
+                coefs2_1=permute(reshape(coefs2,Nchan,size(Wi,2), numel(st)),[2 3 1]);
+                coefs2_2=reshape(coefs2_1,size(Wi,2),[]);
+                datSp2=reshape(Wi*coefs2_2,nt0,NS,Nchan);
+            end
         end
         if ~isempty(ops.nNeigh)
             % template coefficients
@@ -206,6 +252,7 @@ end
 st3             = st3(isort,:);
 
 rez.st3         = st3;
+clear dat DATA
 if ~isempty(ops.nNeighPC)
     % re-sort coefficients for projections
     rez.cProjPC(irun+1:end, :)  = [];
@@ -234,7 +281,11 @@ if ~isempty(ops.nNeigh)
         rez.cProj(iSp, :)       = rez.cProj(iSp, OneToN);
     end
 end
-
+if ops.fullMPMU_keep_spikes
+    %rez.spikes=permute(rez.spikes,[1 3 2]);
+    rez.spikes(:,irun+1:size(rez.spikes,2),:)=[];
+    rez.spikes=rez.spikes(:,isort,:);
+end
 
 %%
 % rez.ops             = ops;
