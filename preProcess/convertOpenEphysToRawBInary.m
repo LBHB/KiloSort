@@ -18,7 +18,7 @@ ch=load(ops.chanMap);
 chans=sort(ch.chanMap);
 fs=cell(ops.Nchan,1);
 for j = 1:ops.Nchan
-    ops.chanMap2(ch.chanMap==chans(j))=j;
+    ops.chanMap_KiloRaw(ch.chanMap==chans(j))=j;
     for k=1:length(ops.root)
         d=dir(fullfile(ops.root{k}, sprintf('*CH%d.continuous', chans(j)) ));
         [d.dir]=deal(ops.root{k});
@@ -59,7 +59,7 @@ if isfield(ops,'driftCorrectionFile') && strcmp(ops.driftCorrectionMode,'BeforeF
     end
     uxc=unique(xcoords);
     did_2dwarn=zeros(size(uxc));
-    [~,reverse_map]=sort(ops.chanMapConn);
+    [~,reverse_map]=sort(ops.chanMapConn_RecRaw);
     xcoords=xcoords(reverse_map);
     ycoords=ycoords(reverse_map);
     for xi=1:length(uxc)

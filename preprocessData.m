@@ -12,17 +12,17 @@ ops.nt0 	= getOr(ops, {'nt0'}, 61);
 if ~isempty(ops.chanMap)
     if ischar(ops.chanMap)
         load(ops.chanMap);
-        if isfield(ops,'chanMap2')
-            chanMap=ops.chanMap2;
-        end
+%         if isfield(ops,'chanMap2')
+%             chanMap=ops.chanMap2;
+%         end
         try
-            chanMapConn = chanMap(connected>1e-6);
+            ops.chanMapConn_RecRaw = chanMap(connected>1e-6);
             xc = xcoords(connected>1e-6);
             yc = ycoords(connected>1e-6);
         catch
-            chanMapConn = 1+chanNums(connected>1e-6);
-            xc = zeros(numel(chanMapConn), 1);
-            yc = [1:1:numel(chanMapConn)]';
+            ops.chanMapConn_RecRaw = 1+chanNums(connected>1e-6);
+            xc = zeros(numel(ops.chanMapConn_RecRaw), 1);
+            yc = [1:1:numel(ops.chanMapConn_RecRaw)]';
         end
         ops.Nchan    = getOr(ops, 'Nchan', sum(connected>1e-6));
         ops.NchanTOT = getOr(ops, 'NchanTOT', numel(connected));
@@ -35,9 +35,9 @@ if ~isempty(ops.chanMap)
         else
             chanMap = ops.chanMap;
         end
-        chanMapConn = ops.chanMap;
-        xc = zeros(numel(chanMapConn), 1);
-        yc = [1:1:numel(chanMapConn)]';
+        ops.chanMapConn_RecRaw = ops.chanMap;
+        xc = zeros(numel(ops.chanMapConn_RecRaw), 1);
+        yc = [1:1:numel(ops.chanMapConn_RecRaw)]';
         connected = true(numel(chanMap), 1);      
         
         ops.Nchan    = numel(connected);
@@ -47,19 +47,20 @@ else
     chanMap  = 1:ops.Nchan;
     connected = true(numel(chanMap), 1);
     
-    chanMapConn = 1:ops.Nchan;    
-    xc = zeros(numel(chanMapConn), 1);
-    yc = [1:1:numel(chanMapConn)]';
+    ops.chanMapConn_RecRaw = 1:ops.Nchan;    
+    xc = zeros(numel(ops.chanMapConn_RecRaw), 1);
+    yc = [1:1:numel(ops.chanMapConn_RecRaw)]';
 end
 rez.ops         = ops;
 ops.xc=xc;
 ops.yc=yc;
-ops.chanMapConn=chanMapConn;
 switch ops.datatype
     case 'Open-Ephys'
    ops = convertOpenEphysToRawBInary(ops,do_write);  % convert data, only for OpenEphys
+   rez.ops.chanMap=ops.chanMap_KiloRaw;
     case 'MANTA'
     ops = convertMANTAToRawBinary(ops,do_write);  % convert data, only for MANTA
+    rez.ops.chanMap = chanMap;
 end
 
 
@@ -77,7 +78,6 @@ rez.yc = yc;
 rez.xcoords = xcoords;
 rez.ycoords = ycoords;
 rez.connected   = connected;
-rez.ops.chanMap = chanMap;
 rez.ops.kcoords = kcoords; 
 
 d = dir(ops.fbinary);
@@ -154,7 +154,7 @@ while 1
     end
     dataRAW = dataRAW';
     dataRAW = single(dataRAW);
-    dataRAW = dataRAW(:, chanMapConn);
+    dataRAW = dataRAW(:,rez.ops.chanMap);
     
     datr = filter(b1, a1, dataRAW);
     datr = flipud(datr);
@@ -318,7 +318,7 @@ for ibatch = 1:Nbatch
         end
         dataRAW = dataRAW';
         dataRAW = single(dataRAW);
-        dataRAW = dataRAW(:, chanMapConn);
+        dataRAW = dataRAW(:,rez.ops.chanMap);
         
         datr = filter(b1, a1, dataRAW);
         datr = flipud(datr);
