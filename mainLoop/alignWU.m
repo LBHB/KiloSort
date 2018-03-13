@@ -84,6 +84,7 @@ if isfield(ops,'align_similar_clusters') && ops.align_similar_clusters
             peak_diff(j)=min_index_this_best-min_index_similars_best;
             snr_inds=min_index_this_best+[-5:5];
             snr_inds(snr_inds<1)=[];
+            snr_inds(snr_inds>size(WU,1))=[];
             snr(j)=max(similar_channel_peak_sign(j)*WU(snr_inds,best_chan,similars{i}(j)))./std(WU(:,best_chan,similars{i}(j)));
         end
         %peak_ratio,peak_diff,snr,similar_channel_peak_sign
