@@ -19,10 +19,14 @@ chans=sort(ch.chanMap);
 fs=cell(ops.Nchan,1);
 for j = 1:ops.Nchan
     ops.chanMap_KiloRaw(ch.chanMap==chans(j))=j;
-    for k=1:length(ops.root)
-        d=dir(fullfile(ops.root{k}, sprintf('*CH%d.continuous', chans(j)) ));
-        [d.dir]=deal(ops.root{k});
-        fs{j} = [fs{j} d];
+end
+
+for k=1:length(ops.root)
+    d=dir(fullfile(ops.root{k}, '*.continuous' ));
+    for j = 1:ops.Nchan
+        d_ = d(arrayfun(@(x)contains(lower(x.name), sprintf('ch%d.continuous',chans(j))),d));
+        [d_.dir]=deal(ops.root{k});
+        fs{j} = [fs{j} d_];
     end
 end
 nblocks = cellfun(@(x) numel(x), fs);
