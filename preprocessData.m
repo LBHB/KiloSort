@@ -154,7 +154,7 @@ while 1
     end
     dataRAW = dataRAW';
     dataRAW = single(dataRAW);
-    dataRAW = dataRAW(:,rez.ops.chanMap);
+    dataRAW = dataRAW(:,ops.chanMapConn_RecRaw);
     
     datr = filter(b1, a1, dataRAW);
     datr = flipud(datr);

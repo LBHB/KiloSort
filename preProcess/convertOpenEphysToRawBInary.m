@@ -16,14 +16,14 @@ end
 
 ch=load(ops.chanMap);
 chans=sort(ch.chanMap);
-fs=cell(ops.Nchan,1);
-for j = 1:ops.Nchan
+fs=cell(ops.NchanTOT,1);
+for j = 1:ops.NchanTOT
     ops.chanMap_KiloRaw(ch.chanMap==chans(j))=j;
 end
 
 for k=1:length(ops.root)
     d=dir(fullfile(ops.root{k}, '*.continuous' ));
-    for j = 1:ops.Nchan
+    for j = 1:ops.NchanTOT
         d_ = d(arrayfun(@(x)contains(lower(x.name), sprintf('ch%d.continuous',chans(j))),d));
         [d_.dir]=deal(ops.root{k});
         fs{j} = [fs{j} d_];
@@ -37,7 +37,7 @@ end
 nBlocks     = unique(nblocks);
 nSamples    = 1024;  % fixed to 1024 for now!
 
-fid = cell(ops.Nchan, 1);
+fid = cell(ops.NchanTOT, 1);
 fprintf('Concatenating Open-Ephys data to a single binary file.\n')
 do_dc=false;
 if isfield(ops,'driftCorrectionFile') && strcmp(ops.driftCorrectionMode,'BeforeFiltering')
@@ -98,7 +98,7 @@ else
 end
 for k = 1:nBlocks
     fprintf(['File ',num2str(k),' of ',num2str(nBlocks),'\n'])
-    for j = 1:ops.Nchan
+    for j = 1:ops.NchanTOT
         fid{j}             = fopen(fullfile(fs{j}(k).dir, fs{j}(k).name));
         % discard header information
         fseek(fid{j}, 1024, 0);
@@ -109,8 +109,8 @@ for k = 1:nBlocks
     while 1
         ind=ind+1;
         t1=now;
-        samples = zeros(nSamples * 1000, ops.Nchan, 'int16');
-        for j = 1:ops.Nchan
+        samples = zeros(nSamples * 1000, ops.NchanTOT, 'int16');
+        for j = 1:ops.NchanTOT
             collectSamps    = zeros(nSamples * 1000, 1, 'int16');
             
             rawData         = fread(fid{j}, 1000 * (nSamples + 6), '1030*int16', 10, 'b');
@@ -334,7 +334,7 @@ for k = 1:nBlocks
     end
     ops.nSamplesBlocks(k) = nsamps;
     
-    for j = 1:ops.Nchan
+    for j = 1:ops.NchanTOT
         fclose(fid{j});
     end
     
