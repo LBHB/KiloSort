@@ -154,6 +154,13 @@ while 1
     end
     dataRAW = dataRAW';
     dataRAW = single(dataRAW);
+    % charlie trying to fix some mysterious error. For some reason, I'm
+    % getting an error because I used slot 2 on the headstage and so the
+    % ops.chanMapConn ranges from 65:128 and these can't be used to index
+    % dataRAW because that's size _ x 64.
+    if max(ops.chanMapConn_RecRaw) > size(dataRaw, 2)
+        ops.chanMapConn_RecRaw = ops.chanMapConn_RecRaw - min(ops.chanMapConn_RecRaw) + 1;
+    end
     dataRAW = dataRAW(:,ops.chanMapConn_RecRaw);
     
     datr = filter(b1, a1, dataRAW);
