@@ -20,9 +20,21 @@ rez.ops.yup = ymin:dmin/2:ymax; % centers of the upsampled y positions
 
 % dminx = median(diff(unique(rez.xc)));
 yunq = unique(rez.yc);
-mxc = zeros(numel(yunq), 1);
-for j = 1:numel(yunq)
-    xc = rez.xc(rez.yc==yunq(j));
+mxc = zeros(numel(yunq)-1, 1);
+num_E_per_yunq=arrayfun(@(y)length(rez.xc(rez.yc==y)),yunq);
+if any(num_E_per_yunq==1)
+    do_two_rows_at_a_time=true;
+    inds=1:numel(yunq)-1;
+else
+    do_two_rows_at_a_time=false;
+    inds=1:numel(yunq);
+end
+for j = inds
+    if do_two_rows_at_a_time
+        xc = rez.xc(rez.yc==yunq(j) | rez.yc==yunq(j+1));
+    else
+        xc = rez.xc(rez.yc==yunq(j));
+    end
     if numel(xc)>1
        mxc(j) = median(diff(sort(xc))); 
     end
@@ -56,8 +68,10 @@ spkTh = 10; % same as the usual "template amplitude", but for the generic templa
 % Extract all the spikes across the recording that are captured by the
 % generic templates. Very few real spikes are missed in this way. 
 [st3, rez] = standalone_detector(rez, spkTh);
-%%
 
+
+%%
+%time, depth, amplitude,[],cluster
 % detected depths
 % dep = st3(:,2);
 % dep = dep - dmin;
@@ -65,6 +79,17 @@ spkTh = 10; % same as the usual "template amplitude", but for the generic templa
 Nbatches      = rez.temp.Nbatch;
 % which batch each spike is coming from
 batch_id = st3(:,5); %ceil(st3(:,1)/dt);
+
+% use_times = [rez.ops.trial_onsets-2.5*ops.fs;rez.ops.trial_onsets+1*ops.fs];
+% keep=false(size(st3,1),1);
+% for i=1:size(use_times,2)
+%     keep(st3(:,1)>use_times(1,i) & st3(:,1) < use_times(2,i))=1;
+% end
+% st3(~keep,:)=[];
+Nspikes_per_batch=arrayfun(@(x)sum(batch_id==x),1:Nbatches);
+Nspikes_cutoff=median(Nspikes_per_batch(Nspikes_per_batch>0))/2;
+use_batch=Nspikes_per_batch>Nspikes_cutoff;
+use_batch(:)=1;
 
 % preallocate matrix of counts with 20 bins, spaced logarithmically
 F = zeros(dmax, 20, Nbatches);
@@ -87,13 +112,24 @@ for t = 1:Nbatches
     
     % the counts themselves are taken on a logarithmic scale (some neurons
     % fire too much!)
-    F(:, :, t) = log2(1+M);
+     F(:, :, t) = log2(1+M);
+%     if length(ix)>Nspikes_cutoff
+%         F(:, :, t) = log2(1+M);
+%         if init==0
+%             F(:, :, 1:t) = repmat(F(:, :, t),1,1,t);
+%             init=1;
+%         end
+%     else
+%         if init
+%             F(:, :, t) = F(:, :, t-1);
+%         end
+%     end
 end
 
 %%
 % determine registration offsets
 ysamp = dmin + dd * [1:dmax] - dd/2;
-[imin,yblk, F0, F0m] = align_block2(F, ysamp, ops.nblocks);
+[imin,yblk, F0, F0m] = align_block2(F(:,:,use_batch), ysamp, ops.nblocks);
 
 if isfield(rez, 'F0')
     d0 = align_pairs(rez.F0, F0);
@@ -101,19 +137,28 @@ if isfield(rez, 'F0')
     imin = imin - d0;
 end
 
+med_filt = getOr(rez.ops, 'drift_estimate_median_filter_pts', 0);
+if med_filt>0
+    imin_pre_filt=imin;
+    imin = medfilt1(imin,med_filt,'truncate');
+end
+    
 %%
-if getOr(ops, 'fig', 1)  
-    figure;
-    set(gcf, 'Color', 'w')
+if 1%getOr(ops, 'fig', 1)  
+%     figure;
+%     set(gcf, 'Color', 'w')
+%     
+%     % plot the shift trace in um
+%     
+     batch_starts=1:rez.ops.NT:rez.ops.tend;
+%     %plot(batch_starts/rez.ops.fs,imin * dd)
+%     plot(imin * dd)
+%     xlabel('batch number')
+%     ylabel('drift (um)')
+%     title('Estimated drift traces')
+%     drawnow
     
-    % plot the shift trace in um
-    plot(imin * dd)
-    xlabel('batch number')
-    ylabel('drift (um)')
-    title('Estimated drift traces')
-    drawnow
-    
-    figure(194);
+    Maximize(figure(194));clf
     set(gcf, 'Color', 'w')
     % raster plot of all spikes at their original depths
     st_shift = st3(:,2); %+ imin(batch_id)' * dd;
@@ -124,12 +169,37 @@ if getOr(ops, 'fig', 1)
         plot(st3(ix, 1)/ops.fs, st_shift(ix), '.', 'color', [1 1 1] * max(0, 1-j/40)) % the marker color here has been carefully tuned
         hold on
     end
+    yl=[min(st_shift) max(st_shift)];
+    yl=yl+diff(yl)/50.*[-1 1];
+    set(gca,'YLim',yl)
+    for j=1:length(rez.ops.trial_onsets)
+        tsh(j)=plot(rez.ops.trial_onsets([j j])/ops.fs,yl,'--','Color',[.4 .4 .4]);
+    end
+    run_starts = [1 cumsum(rez.ops.nSamplesBlocks(1:end-1))];
+    for i=1:length(run_starts)
+        rsh(i)=plot(run_starts([i i])/ops.fs,yl,'-','Color',[.6 .6 .6]);
+        str=[rez.ops.runs{i}(8:9),'\_',rez.ops.runs{i}(13:15)];
+        th(i)=text(run_starts(i)/ops.fs,yl(2),str,'HorizontalAlignment','left','VerticalAlignment','top');
+    end
+    uistack(rsh,'bottom')
+    uistack(tsh,'bottom')
+    
     axis tight
 
     xlabel('time (sec)')
     ylabel('spike position (um)')
-    title('Drift map')
     
+    h(1)=gca;
+    [h(2),hh]=plot_right(h(1),batch_starts/rez.ops.fs,imin * dd);
+    if med_filt>0
+        hh2=plot(h(2),batch_starts/rez.ops.fs,imin_pre_filt * dd);
+        uistack(hh2,'bottom')
+    end
+    set(h(2),'YDir','reverse');
+    ylabel(h(2),'Estimated drift (um)')
+    set(h,'TickDir','out','Box','off')
+    set(h(2),'YLim',mean(imin(:) * dd)+diff(yl)/2.*[-1 1])
+    title(h(2),'Drift map')
 end
 %%
 % convert to um 
